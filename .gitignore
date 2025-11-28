@@ -40,3 +40,7 @@ target
 secrets.yml
 .gradletasknamecache
 .sts4-cache
+.terraform/
+*.terraform
+terraform.tfstate
+.terraform.lock.hcl

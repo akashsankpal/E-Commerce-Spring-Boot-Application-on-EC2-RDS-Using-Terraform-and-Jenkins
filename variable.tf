@@ -1,6 +1,6 @@
 variable "my_key" {
      description="master1"
-      type = string
+      default = "master1"
  }
 variable "my_instance" {
     description = "my"
