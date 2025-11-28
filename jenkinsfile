@@ -14,29 +14,29 @@ pipeline {
 
     stage('Checkout') {
       steps {
-        git branch: 'main', url: 'https://github.com/akashsankpal/E-Commerce-Spring-Boot-Application-on-EC2-RDS-Using-Terraform-and-Jenkins.git'
+        git branch: 'main',
+            url: 'https://github.com/akashsankpal/E-Commerce-Spring-Boot-Application-on-EC2-RDS-Using-Terraform-and-Jenkins.git'
       }
     }
 
-    stage('Verify Project Structure') {
+    stage('Verify Structure') {
       steps {
         sh '''
           echo "Workspace: $(pwd)"
           ls -la
-          ls -la E-Commerce-Spring-Boot-Application || true
         '''
       }
     }
 
     stage('Build') {
       steps {
-        dir('E-Commerce-Spring-Boot-Application') {
+        dir('JtProject') {   // ✅ Correct project directory
           sh '''
             mvn -v
             mvn clean package -DskipTests
           '''
         }
-        archiveArtifacts artifacts: '**/target/*.jar', onlyIfSuccessful: true
+        archiveArtifacts artifacts: 'JtProject/target/*.jar', onlyIfSuccessful: true
       }
     }
 
@@ -67,7 +67,7 @@ EOF
             sudo chown ${EC2_USER}:${EC2_USER} ${APP_REMOTE_DIR}
           "
 
-          scp -o StrictHostKeyChecking=no E-Commerce-Spring-Boot-Application/target/*.jar \
+          scp -o StrictHostKeyChecking=no JtProject/target/*.jar \
               ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/ecommerce.jar
 
           scp -o StrictHostKeyChecking=no application-prod.properties \
@@ -97,7 +97,7 @@ EOF
       echo '✅ Deployment successful!'
     }
     failure {
-      echo '❌ Deployment failed! Please check logs above.'
+      echo '❌ Deployment failed! Please check the logs.'
     }
   }
 }
