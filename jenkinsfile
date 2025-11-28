@@ -3,11 +3,11 @@ pipeline {
 
   environment {
     EC2_USER = 'ec2-user'
-    EC2_HOST = "15.206.171.157"      // Replace with Terraform output
-    SSH_CRED = 'node-app-key'          // Jenkins SSH key credential ID
+    EC2_HOST = "15.206.171.157"
+    SSH_CRED = 'node-app-key'
     APP_REMOTE_DIR = '/opt/ecommerce'
-    JAR_NAME = 'target/*.jar'
-    DB_ENDPOINT = "ecommerce-db.c1qmqa4uox0f.ap-south-1.rds.amazonaws.com"    // Replace with Terraform output
+    JAR_NAME = 'E-Commerce-Spring-Boot-Application/target/*.jar'
+    DB_ENDPOINT = "ecommerce-db.c1qmqa4uox0f.ap-south-1.rds.amazonaws.com"
     DB_USER = credentials('db_user')
     DB_PASS = credentials('db_pass')
     HEALTH_URL = "http://${EC2_HOST}:8080/actuator/health"
@@ -22,8 +22,10 @@ pipeline {
 
     stage('Build') {
       steps {
-        sh 'mvn -B clean package -DskipTests=false'
-        archiveArtifacts artifacts: 'target/*.jar', onlyIfSuccessful: true
+        dir('E-Commerce-Spring-Boot-Application') {
+          sh 'mvn -B clean package -DskipTests=false'
+        }
+        archiveArtifacts artifacts: '**/target/*.jar', onlyIfSuccessful: true
       }
     }
 
@@ -48,8 +50,10 @@ EOF
             sudo mkdir -p ${APP_REMOTE_DIR} &&
             sudo chown ${EC2_USER}:${EC2_USER} ${APP_REMOTE_DIR}
           '
+
           scp -o StrictHostKeyChecking=no ${JAR_NAME} ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/ecommerce.jar
           scp -o StrictHostKeyChecking=no application-prod.properties ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/application-prod.properties
+
           ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
             sudo chown ${EC2_USER}:${EC2_USER} ${APP_REMOTE_DIR}/* &&
             sudo systemctl restart ecommerce
@@ -62,9 +66,7 @@ EOF
     stage('Health Check') {
       steps {
         sh 'sleep 10'
-        sh """
-        curl -f ${HEALTH_URL}
-        """
+        sh "curl -f ${HEALTH_URL}"
       }
     }
   }
