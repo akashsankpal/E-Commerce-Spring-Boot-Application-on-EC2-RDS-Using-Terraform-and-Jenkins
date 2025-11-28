@@ -1,5 +1,5 @@
-
-
+.venv
+/.idea
 .terraform/
 *.terraform
 terraform.tfstate
