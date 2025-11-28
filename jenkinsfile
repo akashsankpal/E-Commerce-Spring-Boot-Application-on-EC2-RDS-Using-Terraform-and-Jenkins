@@ -3,27 +3,38 @@ pipeline {
 
   environment {
     EC2_USER = 'ec2-user'
-    EC2_HOST = "15.206.171.157"
+    EC2_HOST = '15.206.171.157'
     SSH_CRED = 'node-app-key'
     APP_REMOTE_DIR = '/opt/ecommerce'
-    JAR_NAME = 'E-Commerce-Spring-Boot-Application/target/*.jar'
-    DB_ENDPOINT = "ecommerce-db.c1qmqa4uox0f.ap-south-1.rds.amazonaws.com"
-    DB_USER = credentials('db_user')
-    DB_PASS = credentials('db_pass')
+    DB_ENDPOINT = 'ecommerce-db.c1qmqa4uox0f.ap-south-1.rds.amazonaws.com'
     HEALTH_URL = "http://${EC2_HOST}:8080/actuator/health"
   }
 
   stages {
+
     stage('Checkout') {
       steps {
         git branch: 'main', url: 'https://github.com/akashsankpal/E-Commerce-Spring-Boot-Application-on-EC2-RDS-Using-Terraform-and-Jenkins.git'
       }
     }
 
+    stage('Verify Project Structure') {
+      steps {
+        sh '''
+          echo "Workspace: $(pwd)"
+          ls -la
+          ls -la E-Commerce-Spring-Boot-Application || true
+        '''
+      }
+    }
+
     stage('Build') {
       steps {
         dir('E-Commerce-Spring-Boot-Application') {
-          sh 'mvn -B clean package -DskipTests=false'
+          sh '''
+            mvn -v
+            mvn clean package -DskipTests
+          '''
         }
         archiveArtifacts artifacts: '**/target/*.jar', onlyIfSuccessful: true
       }
@@ -31,48 +42,62 @@ pipeline {
 
     stage('Prepare Config') {
       steps {
-        sh """
-        cat > application-prod.properties <<EOF
+        withCredentials([
+          string(credentialsId: 'db_user', variable: 'DB_USER'),
+          string(credentialsId: 'db_pass', variable: 'DB_PASS')
+        ]) {
+          sh '''
+          cat > application-prod.properties <<EOF
 spring.datasource.url=jdbc:mysql://${DB_ENDPOINT}:3306/ecomdb
 spring.datasource.username=${DB_USER}
 spring.datasource.password=${DB_PASS}
 spring.profiles.active=prod
 EOF
-        """
+          '''
+        }
       }
     }
 
     stage('Upload & Deploy') {
       steps {
-        sshagent(credentials: [env.SSH_CRED]) {
-          sh """
-          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+        sshagent(credentials: ['node-app-key']) {
+          sh '''
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "
             sudo mkdir -p ${APP_REMOTE_DIR} &&
             sudo chown ${EC2_USER}:${EC2_USER} ${APP_REMOTE_DIR}
-          '
+          "
 
-          scp -o StrictHostKeyChecking=no ${JAR_NAME} ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/ecommerce.jar
-          scp -o StrictHostKeyChecking=no application-prod.properties ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/application-prod.properties
+          scp -o StrictHostKeyChecking=no E-Commerce-Spring-Boot-Application/target/*.jar \
+              ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/ecommerce.jar
 
-          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+          scp -o StrictHostKeyChecking=no application-prod.properties \
+              ${EC2_USER}@${EC2_HOST}:${APP_REMOTE_DIR}/application-prod.properties
+
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "
             sudo chown ${EC2_USER}:${EC2_USER} ${APP_REMOTE_DIR}/* &&
             sudo systemctl restart ecommerce
-          '
-          """
+          "
+          '''
         }
       }
     }
 
     stage('Health Check') {
       steps {
-        sh 'sleep 10'
-        sh "curl -f ${HEALTH_URL}"
+        sh '''
+          sleep 10
+          curl -f ${HEALTH_URL}
+        '''
       }
     }
   }
 
   post {
-    success { echo "✅ Deployment successful!" }
-    failure { echo "❌ Deployment failed!" }
+    success {
+      echo '✅ Deployment successful!'
+    }
+    failure {
+      echo '❌ Deployment failed! Please check logs above.'
+    }
   }
 }
